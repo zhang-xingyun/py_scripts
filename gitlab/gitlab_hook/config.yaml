@@ -1,0 +1,17 @@
+BRANCH:
+  ph_check: true
+  name_check:  ^refs/heads/[-a-z0-9_/]+$
+
+TAG:
+  ph_check: 
+  name_check: ^refs/tags/[-A-Z0-9_/.]+$
+
+COMMIT:
+  global:
+    jira_check: 
+    jira_check_recurrence: false
+    commit_msg: (feat|fix|docs|style|refactor|perf|test|chore)(\[)(\w+)(\]):( ).+(?<![\.|\;|\:|\,])$
+    commit_msg_recurrence: false
+    ph_force_cr: true
+    ph_force_people: 
+    ph_ac_number: 

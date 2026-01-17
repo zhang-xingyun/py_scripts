@@ -1,0 +1,100 @@
+pipeline {
+    agent {
+        kubernetes {
+            label "${UUID.randomUUID().toString()}"
+            yaml """
+                metadata:
+                  labels:
+                    some-label: some-label-value
+                    class: KubernetesDeclarativeAgentTest
+                  namespace: scm
+                spec:
+                  nodeSelector:
+                    jenkins-ci: "true"
+                  containers:
+                    - name: prepare
+                      image: hub.test.com/builder/cicd-common-tool:v9
+                      command:
+                      - cat
+                      tty: true
+                      env:
+                        - name: CONTAINER_ENV_VAR
+                          value: prepare
+            """
+        }
+    }
+    parameters {
+        string defaultValue: '', description: 'Enter user name', name: 'USR_NAME', trim: true
+        string defaultValue: '', description: 'Enter user email', name: 'USR_EMAIL', trim: true
+        booleanParam defaultValue: true, description: 'External user ', name: 'External'
+        string defaultValue: '1196', description: 'External group id ', name: 'Ex_group_id', trim: true
+        booleanParam defaultValue: true, description: 'add External user  to  External group', name: 'Ex_usr_to_group'
+    }
+    environment {
+        LANG = 'en_US.UTF-8'
+    }
+    stages{
+        stage('prepare') {
+            environment {
+                LANG = 'en_US.UTF-8'
+                SSH_KEY_FILE = credentials('')
+            }
+            steps {
+                container('prepare') {
+                    script {
+                    sh'env'
+
+                    create_usr()
+
+                    }
+                }
+
+            }
+        }
+        
+    }
+    options {
+      gitLabConnection('Gitlab connector by robot')
+    }
+    post {
+        failure {
+            container('prepare') {
+                script {
+
+                
+                sh '''
+                    python3 feishu_notify/feishu_notify.py  -k '' -t 'External gitlab user_create failed' -b ${BUILD_URL} -m 'External gitlab user_create failed'
+                '''
+                }
+            }
+        }
+        
+    }
+}
+def create_usr() {
+    sh 'pwd'
+    if (!env.USR_EMAIL) {
+        if(External){
+        user_email ="${USR_NAME}"+"@123.com"
+        }
+        else{
+        user_email ="${USR_NAME}"+"@test.com"
+        }
+    }
+    else{
+        user_email="${USR_EMAIL}"
+    }
+    if(Ex_group_id){
+        Ex_group="${Ex_group_id}"
+    }
+    else{ 
+        Ex_group='104'
+        }
+    dir("./ex_gitlab_addusr") {
+
+        sh """
+            python3 create-gitlab-user.py ${USR_NAME} $user_email ${External} $Ex_group  ${Ex_usr_to_group}
+        """
+
+    } 
+}

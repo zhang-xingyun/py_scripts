@@ -1,0 +1,124 @@
+pipeline {
+    agent {
+        kubernetes {
+            label "${UUID.randomUUID().toString()}"
+            yaml """
+                metadata:
+                  labels:
+                    some-label: some-label-value
+                    class: KubernetesDeclarativeAgentTest
+                  namespace: scm
+                spec:
+                  nodeSelector:
+                    jenkins-ci: "true"
+                  containers:
+                    - name: prepare
+                      image: hub.test.com/builder/cicd-common-tool:v9
+                      command:
+                      - cat
+                      tty: true
+                      env:
+                        - name: CONTAINER_ENV_VAR
+                          value: prepare
+
+            """
+        }
+    }
+    parameters {
+        string defaultValue: '', description: 'Enter project url', name: 'project_url', trim: true
+        string defaultValue: '', description: 'Enter manifest file', name: 'manifest_file', trim: true
+        string defaultValue: '', description: 'Enter branch name of manifest file', name: 'branch_name', trim: true
+        string defaultValue: '', description: 'Enter source_branch', name: 'source_branch', trim: true
+        string defaultValue: '', description: 'Enter new_Branch', name: 'new_Branch', trim: true
+        string defaultValue: '', description: 'Enter delete_branch', name: 'delete_branch', trim: true
+        string defaultValue: '', description: 'Enter delete_tag', name: 'delete_tag', trim: true
+        string defaultValue: '', description: 'Enter new_tag', name: 'new_tag', trim: true
+        choice choices: ['branch-create','branch-delete','tag-delete','tag-create'], description: 'action_type ', name: 'action_type'
+    }
+    environment {
+        LANG = 'en_US.UTF-8'
+    }
+    stages{
+        stage('prepare') {
+            environment {
+                LANG = 'en_US.UTF-8'
+                SSH_KEY_FILE = credentials('')
+            }
+            steps {
+                container('prepare') {
+                    script {
+                    sh'env'
+                    gitlab_handle()
+
+                    }
+                }
+
+            }
+        }
+        
+    }
+    options {
+      gitLabConnection('Gitlab connector by robot')
+    }
+    /*post {
+        failure {
+            container('prepare') {
+                script {
+                sh '''
+                    python3 feishu_notify/feishu_notify.py  -k '' -t 'gitlab br/tag create/delete failed' -b ${BUILD_URL} -m 'gitlab br/tag create/delete failed'
+                '''
+                }
+            }
+        }
+    }*/
+}
+def gitlab_handle() {
+    sh 'pwd'
+    if ("${env.manifest_file}"!=''&&"${env.branch_name}"!=''){
+        
+        source_branch_name ="${env.branch_name}"
+        project_ssh_url ="git@gitlab.test.com:"+"${env.project_url}".split('cc/')[1]+".git"
+        echo project_ssh_url
+
+        checkout([$class: 'GitSCM', branches: [[name: "*/${env.branch_name}"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'init_code'],[$class: 'SubmoduleOption', disableSubmodules: false, parentCredentials: true, recursiveSubmodules: true, reference: '', trackingSubmodules: false]], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url:project_ssh_url]]])
+        sh 'ls -R'
+        sh "cp  init_code/$manifest_file gitlab_br_tag.xml"
+        xmlfile ='gitlab_br_tag.xml'
+    }
+    
+    else if ("${env.source_branch}"!=''){
+        xmlfile='noxml'
+        source_branch_name=="master"
+    }
+    else {
+        xmlfile='noxml'
+        source_branch_name=="${env.source_branch}"
+    }
+    if ("${env.action_type}"=='branch-create') {
+        
+        sh"""
+        ls 
+        python3 gitlab_br_tag/gitlab_br_tag.py $action_type $project_url $source_branch_name $xmlfile $new_Branch
+        
+        """
+    }
+    if ("${env.action_type}"=='branch-delete') {
+        sh"""
+        python3 gitlab_br_tag/gitlab_br_tag.py $action_type $project_url $source_branch_name $xmlfile $delete_branch 
+        
+        """
+    }
+    
+    if ("${env.action_type}"=='tag-delete') {
+        sh"""
+        python3 gitlab_br_tag/gitlab_br_tag.py $action_type $project_url $source_branch_name $xmlfile $delete_tag 
+        
+        """
+    }
+    if ("${env.action_type}"=='tag-create') {
+        sh"""
+        python3 gitlab_br_tag/gitlab_br_tag.py $action_type $project_url $source_branch_name $xmlfile $new_tag 
+        
+        """
+    }
+}
